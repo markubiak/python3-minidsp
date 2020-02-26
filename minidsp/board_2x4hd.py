@@ -1,3 +1,4 @@
+import struct
 from .transport_echo import *
 from .transport_usbhid import *
 
@@ -80,3 +81,43 @@ class Board2x4HD():
         self._transport.write([0x05, 0xff, 0xe5, 0x01])
         self._transport.write([0x05, 0xff, 0xe0, 0x01])
         self._transport.write([0x05, 0xff, 0xda, 0x02])
+
+    def getLevels(self):
+        # get input levels on the DSP right now.
+        # adapted from https://github.com/mrene/node-minidsp/
+        command = [0x14, 0x00, 0x44, 0x02]
+        resp = self._transport.write(command)
+        # Validity checking
+        if resp[:3] != [0x14, 0x00, 0x44]:
+            raise RuntimeError("Received unexpected response: " + str(resp))
+        # current levels are in the response in two 32bit low-endian floats
+        # at index 3-7 and 8-11 inclusive; so unpack two nums...
+        # no rounding or anything, so if sending down a json wire or something
+        # you might want to trim
+        return struct.unpack("<ff", bytes(resp[3:11]))
+
+    def _setInputGain(self, input=0, gain=0):
+        # input either 0 or 1; gain from -127.5 to +12
+        if (gain > 12) or (gain < -127.5):
+            raise RuntimeError("Gain out of bounds. Range: -127.5 to 12 (db)")
+
+        # again, this is adapted from https://github.com/mrene/node-minidsp/
+        command = [0x13, 0x80, 0]
+        if input == 0:
+            command.append(0x1A)
+        elif input == 1:
+            command.append(0x1B)
+        else:
+            raise RuntimeError("input should be either 0 or 1")
+
+        # pack the gain value into a little-endian 32bit bytes string
+        # and add those 4 bytes to the command
+        command += list(struct.pack("<f", gain))
+
+        resp = self._transport.write(command)
+        return resp
+
+    def setGain(self, gain):
+        # set input gain for both input channels; use the _setInputGain to set individual ones
+        self._setInputGain(0, gain)
+        self._setInputGain(1, gain)

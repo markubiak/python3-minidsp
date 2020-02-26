@@ -3,7 +3,7 @@ import argparse
 import minidsp
 
 boards = ['2x4HD', 'DDRC24']
-controls = ['volume', 'mute', 'input', 'config', 'dirac']
+controls = ['volume', 'mute', 'input', 'config', 'dirac', 'gain', 'levels']
 
 def main():
     # argparse setup
@@ -48,6 +48,8 @@ def main():
             print("Config", board.getConfig())
         elif args.control == 'dirac':
             print("Dirac on" if board.getDiracStatus() else "Dirac off")
+        elif args.control == 'levels':
+            print("Playing Levels are {}".format(board.getLevels()))
     elif args.action == 'set':
         if args.control == 'volume':
             try:
@@ -73,6 +75,12 @@ def main():
                 board.setDiracStatus(False)
             else:
                 parser.error("Dirac must be set to 'on' or 'off'")
+        if args.control == 'gain':
+            try:
+                gainFloat = float(args.value)
+            except:
+                parser.error("Gain must be provided in db and without units ('-127.5' to '12')")
+            board.setGain(gainFloat)
 
 if __name__ == '__main__':
     main()
