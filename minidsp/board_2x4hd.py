@@ -6,25 +6,28 @@ from .transport_usbhid import *
 # of the command used to set whatever value it was. However,
 # the following bytes do contain the new values. Look into this.
 
-class Board2x4HD():
+
+class Board2x4HD:
     """ Commands for 2x4HD """
 
     def __init__(self, transport):
-        if (transport == "usbhid"):
+        if transport == "usbhid":
             self._transport = TransportUSBHID(0x2752, 0x0011)
-        elif (transport == "echo"):
+        elif transport == "echo":
             self._transport = TransportEcho()
         else:
-            raise RuntimeError("Provided transport " + transport + " is not a valid option")
+            raise RuntimeError(
+                "Provided transport " + transport + " is not a valid option"
+            )
 
     def _masterStatus(self):
         # Send master status check command
-        resp = self._transport.write([0x05, 0xff, 0xda, 0x02])
+        resp = self._transport.write([0x05, 0xFF, 0xDA, 0x02])
         # Validity checking
-        if (resp[:3] != [0x05, 0xff, 0xda]) or not (resp[4] in [0x00, 0x01]):
+        if (resp[:3] != [0x05, 0xFF, 0xDA]) or not (resp[4] in [0x00, 0x01]):
             raise RuntimeError("Received unexpected response: " + str(resp))
         # Return results as a tuple
-        return {"volume": resp[3]*-0.5, "mute": (resp[4] == 0x01)}
+        return {"volume": resp[3] * -0.5, "mute": (resp[4] == 0x01)}
 
     def getMute(self):
         # Get mute from master status
@@ -43,14 +46,19 @@ class Board2x4HD():
         if (volume > 0) or (volume < -127.5):
             raise RuntimeError("Volume out of bounds. Range: -127.5 to 0 (db)")
         # Send volume command
-        self._transport.write([0x42, round(-2*volume)])
+        self._transport.write([0x42, round(-2 * volume)])
 
     def getInputSource(self):
         # Send input source check command
-        resp = self._transport.write([0x05, 0xff, 0xd9, 0x01])
+        resp = self._transport.write([0x05, 0xFF, 0xD9, 0x01])
         # Validity checking
-        if (resp[:3] != [0x05, 0xff, 0xd9]) or not (resp[3] in [0x00, 0x01, 0x02]):
-            raise RuntimeError("Received unexpected response: " + str(resp))
+        if (resp[:3] != [0x05, 0xFF, 0xD9]) or not (resp[3] in [0x00, 0x01, 0x02]):
+            # naive try-again
+            resp = self._transport.write([0x05, 0xFF, 0xD9, 0x01])
+            if resp[3] not in (0x00, 0x01, 0x02):
+                raise RuntimeError(
+                    "Received unexpected response (two times): " + str(resp)
+                )
         # Return the source string
         sources = ["analog", "toslink", "usb"]
         return sources[resp[3]]
@@ -65,9 +73,11 @@ class Board2x4HD():
 
     def getConfig(self):
         # Send config check command
-        resp = self._transport.write([0x05, 0xff, 0xd8, 0x01])
+        resp = self._transport.write([0x05, 0xFF, 0xD8, 0x01])
         # Validity checking
-        if (resp[:3] != [0x05, 0xff, 0xd8]) or not (resp[3] in [0x00, 0x01, 0x02, 0x03]):
+        if (resp[:3] != [0x05, 0xFF, 0xD8]) or not (
+            resp[3] in [0x00, 0x01, 0x02, 0x03]
+        ):
             raise RuntimeError("Received unexpected response: " + str(resp))
         # Return the source index (1-indexed)
         return resp[3] + 1
@@ -77,10 +87,10 @@ class Board2x4HD():
         if (config < 1) or (config > 4):
             raise RuntimeError("Config index out of range (should be 1-4)")
         # Send the config change command
-        self._transport.write([0x25, config-1, 0x02])
-        self._transport.write([0x05, 0xff, 0xe5, 0x01])
-        self._transport.write([0x05, 0xff, 0xe0, 0x01])
-        self._transport.write([0x05, 0xff, 0xda, 0x02])
+        self._transport.write([0x25, config - 1, 0x02])
+        self._transport.write([0x05, 0xFF, 0xE5, 0x01])
+        self._transport.write([0x05, 0xFF, 0xE0, 0x01])
+        self._transport.write([0x05, 0xFF, 0xDA, 0x02])
 
     def getLevels(self):
         # get input levels on the DSP right now.
@@ -101,14 +111,11 @@ class Board2x4HD():
         if (gain > 12) or (gain < -127.5):
             raise RuntimeError("Gain out of bounds. Range: -127.5 to 12 (db)")
 
-        # again, this is adapted from https://github.com/mrene/node-minidsp/
-        command = [0x13, 0x80, 0]
-        if input == 0:
-            command.append(0x1A)
-        elif input == 1:
-            command.append(0x1B)
-        else:
+        if input not in (0, 1):
             raise RuntimeError("input should be either 0 or 1")
+        # again, this is adapted from https://github.com/mrene/node-minidsp/
+        # the node code has that last byte either at 0x1A or 0x1B, depending on input, so...
+        command = [0x13, 0x80, 0x0, 0x1A + input]
 
         # pack the gain value into a little-endian 32bit bytes string
         # and add those 4 bytes to the command

@@ -5,7 +5,7 @@ description = "Python bindings to a MiniDSP unit"
 authors = ["Matt Feifarek <matt.feifarek@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.5"
+python = ">=3.0"
 argparse = "*"
 hidapi = "*"
 
