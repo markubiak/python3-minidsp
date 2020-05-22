@@ -21,13 +21,39 @@ class Board2x4HD:
             )
 
     def _masterStatus(self):
+        status = {}
         # Send master status check command
         resp = self._transport.write([0x05, 0xFF, 0xDA, 0x02])
-        # Validity checking
-        if (resp[:3] != [0x05, 0xFF, 0xDA]) or not (resp[4] in [0x00, 0x01]):
-            raise RuntimeError("Received unexpected response: " + str(resp))
-        # Return results as a tuple
-        return {"volume": resp[3] * -0.5, "mute": (resp[4] == 0x01)}
+        # sometimes we get back other stuff from the card, and have to get past them
+        # before we can get what we want...
+        tries = 1
+        while resp[:3] != [0x05, 0xFF, 0xDA]:
+            if tries > 10:
+                raise RuntimeError(
+                    "Tried >10 times to get a valid response to master status! Crashing!"
+                )
+            # some known values that often come back are
+            # ['0x5', '0xff', '0xd9', '0x02']
+            # d9 is switching source; 02 is for example the usb input, so might as well process those
+            if resp[2] == "0xd9":
+                # throw it in just to be nice so we don't have to do it later
+                status["source"] = ["analog", "toslink", "usb"][resp[3]]
+            # try again
+            tries += 1
+            resp = self._transport.write([0x05, 0xFF, 0xDA, 0x02])
+
+        # if we've made it here, some valid volume/mute information is likely...
+        # and resp starts with [0x05, 0xFF, 0xDA]
+        if resp[4] not in [0x00, 0x01]:
+            raise RuntimeError(
+                "Received unexpected response: bad mute value " + str(resp)
+            )
+        status["volume"] = resp[3] * -0.5
+        status["mute"] = resp[4] == 0x01
+        # add status
+        if 'source' not in status:
+            status['source'] = self.getInputSource()
+        return status
 
     def getMute(self):
         # Get mute from master status
@@ -52,13 +78,21 @@ class Board2x4HD:
         # Send input source check command
         resp = self._transport.write([0x05, 0xFF, 0xD9, 0x01])
         # Validity checking
-        if (resp[:3] != [0x05, 0xFF, 0xD9]) or not (resp[3] in [0x00, 0x01, 0x02]):
-            # naive try-again
-            resp = self._transport.write([0x05, 0xFF, 0xD9, 0x01])
-            if resp[3] not in (0x00, 0x01, 0x02):
+        tries = 1
+        while resp[:3] != [0x05, 0xFF, 0xD9]:
+            if tries > 10:
                 raise RuntimeError(
-                    "Received unexpected response (two times): " + str(resp)
+                    "Tried >10 times to get a valid response to inputSource! Crashing!"
                 )
+            # could log what we DO get back here, but don't have a place to do that right now...
+            resp = self._transport.write([0x05, 0xFF, 0xD9, 0x01])
+
+        # if we've made it here, some valid source information is likely...
+        # and resp starts with [0x05, 0xFF, 0xD9]
+        if resp[3] not in [0x00, 0x01, 0x02]:
+            raise RuntimeError(
+                "Received unexpected response: bad source value " + str(resp)
+            )
         # Return the source string
         sources = ["analog", "toslink", "usb"]
         return sources[resp[3]]
