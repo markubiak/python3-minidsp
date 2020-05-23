@@ -35,7 +35,7 @@ class Board2x4HD:
             # some known values that often come back are
             # ['0x5', '0xff', '0xd9', '0x02']
             # d9 is switching source; 02 is for example the usb input, so might as well process those
-            if resp[2] == "0xd9":
+            if resp and (len(resp) > 2) and resp[2] == "0xd9":
                 # throw it in just to be nice so we don't have to do it later
                 status["source"] = ["analog", "toslink", "usb"][resp[3]]
             # try again
@@ -51,8 +51,8 @@ class Board2x4HD:
         status["volume"] = resp[3] * -0.5
         status["mute"] = resp[4] == 0x01
         # add status
-        if 'source' not in status:
-            status['source'] = self.getInputSource()
+        if "source" not in status:
+            status["source"] = self.getInputSource()
         return status
 
     def getMute(self):
